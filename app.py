@@ -1,10 +1,12 @@
-import os
 import sqlite3
 import hashlib
 import math
 import logging
 import json
 import asyncio
+import streamlit as st
+import pandas as pd
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -1797,188 +1799,90 @@ if __name__ == '__main__':
 
 
 
-app = Flask(__name__)
 
-# Create templates directory and add HTML template
-if not os.path.exists('templates'):
-    os.makedirs('templates')
+import streamlit as st
+import sqlite3
+import pandas as pd
+import os
+from datetime import datetime
 
-with open('templates/index.html', 'w') as f:
-    f.write('''
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Log Viewer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .log-container {
-            max-height: 700px;
-            overflow-y: auto;
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-        }
-        .error-log {
-            color: #dc3545;
-        }
-        .warning-log {
-            color: #ffc107;
-        }
-        .info-log {
-            color: #0dcaf0;
-        }
-        .timestamp {
-            color: #6c757d;
-            font-size: 0.9em;
-        }
-    </style>
-</head>
-<body>
-    <div class="container mt-4">
-        <h1 class="mb-4">Log Viewer</h1>
-        
-        <div class="row mb-3">
-            <div class="col">
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-primary" onclick="refreshLogs()">Refresh</button>
-                    <button type="button" class="btn btn-secondary" onclick="clearLogs()">Clear Logs</button>
-                </div>
-            </div>
-            <div class="col">
-                <select class="form-select" id="logLevel" onchange="filterLogs()">
-                    <option value="all">All Levels</option>
-                    <option value="error">Errors Only</option>
-                    <option value="warning">Warnings & Errors</option>
-                    <option value="info">Info & Above</option>
-                </select>
-            </div>
-            <div class="col">
-                <input type="text" class="form-control" id="searchInput" 
-                       placeholder="Search logs..." onkeyup="filterLogs()">
-            </div>
-        </div>
+LOG_FILE = "user_database.log"
+DB_FILE = "user_database.db"
 
-        <div class="log-container" id="logContent">
-            <!-- Logs will be populated here -->
-        </div>
-    </div>
-
-    <script>
-        function refreshLogs() {
-            fetch('/get_logs')
-                .then(response => response.json())
-                .then(data => {
-                    const logContent = document.getElementById('logContent');
-                    logContent.innerHTML = '';
-                    data.forEach(log => {
-                        const logElement = document.createElement('div');
-                        logElement.className = `log-entry ${log.level.toLowerCase()}-log`;
-                        logElement.innerHTML = `
-                            <span class="timestamp">[${log.timestamp}]</span>
-                            <span class="level">[${log.level}]</span>
-                            <span class="message">${log.message}</span>
-                        `;
-                        logContent.appendChild(logElement);
-                    });
-                    filterLogs();
-                });
-        }
-
-        function clearLogs() {
-            if (confirm('Are you sure you want to clear all logs?')) {
-                fetch('/clear_logs', { method: 'POST' })
-                    .then(() => refreshLogs());
-            }
-        }
-
-        function filterLogs() {
-            const level = document.getElementById('logLevel').value;
-            const searchText = document.getElementById('searchInput').value.toLowerCase();
-            const logEntries = document.getElementsByClassName('log-entry');
-
-            Array.from(logEntries).forEach(entry => {
-                const text = entry.innerText.toLowerCase();
-                const entryLevel = entry.className.split(' ')[1].split('-')[0];
-                
-                let levelMatch = true;
-                if (level === 'error') {
-                    levelMatch = entryLevel === 'error';
-                } else if (level === 'warning') {
-                    levelMatch = ['error', 'warning'].includes(entryLevel);
-                } else if (level === 'info') {
-                    levelMatch = ['error', 'warning', 'info'].includes(entryLevel);
-                }
-
-                const textMatch = text.includes(searchText);
-                entry.style.display = levelMatch && textMatch ? 'block' : 'none';
-            });
-        }
-
-        // Initial load
-        refreshLogs();
-        // Auto-refresh every 30 seconds
-        setInterval(refreshLogs, 30000);
-    </script>
-</body>
-</html>
-    ''')
-
-def parse_log_line(line):
-    """Parse a log line into components."""
-    try:
-        # Assuming log format: [TIMESTAMP] [LEVEL] Message
-        parts = line.strip().split('] [', 2)
-        if len(parts) >= 2:
-            timestamp = parts[0].strip('[')
-            level = parts[1].strip(']')
-            message = parts[2] if len(parts) > 2 else ''
-            return {
-                'timestamp': timestamp,
-                'level': level,
-                'message': message
-            }
-    except Exception:
-        pass
-    
-    return {
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'level': 'INFO',
-        'message': line.strip()
-    }
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/get_logs')
-def get_logs():
+# Function to fetch logs
+def fetch_logs():
     logs = []
     try:
-        with open('user_database.log', 'r') as f:
+        with open(LOG_FILE, "r") as f:
             for line in f:
-                log_entry = parse_log_line(line)
-                logs.append(log_entry)
+                logs.append(line.strip())
     except FileNotFoundError:
-        logs.append({
-            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'level': 'INFO',
-            'message': 'No logs found.'
-        })
-    return jsonify(logs)
+        logs.append("No logs found.")
+    return logs
 
-@app.route('/clear_logs', methods=['POST'])
+# Function to clear logs
 def clear_logs():
-    try:
-        with open('user_database.log', 'w') as f:
-            f.write('')
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+    open(LOG_FILE, "w").close()
 
-if __name__ == '__main__':
-    # Ensure log file exists
-    if not os.path.exists('user_database.log'):
-        open('user_database.log', 'a').close()
-        
-    # Start the web server
-    app.run(debug=True, port=5000)
+# Function to fetch users from database
+def fetch_users():
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql_query("SELECT * FROM users", conn)
+    conn.close()
+    return df
+
+# Function to update user points
+def update_user_points(user_id, new_points):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET points = ? WHERE user_id = ?", (new_points, user_id))
+    conn.commit()
+    conn.close()
+
+# Function to delete a user
+def delete_user(user_id):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+# Streamlit UI
+st.title("Admin Panel - Logs & Database")
+
+# Sidebar Navigation
+menu = st.sidebar.radio("Navigation", ["📜 Logs", "👥 User Database"])
+
+# Log Viewer
+if menu == "📜 Logs":
+    st.subheader("📜 Log Viewer")
+
+    logs = fetch_logs()
+    st.text_area("Logs:", "\n".join(logs), height=300)
+
+    if st.button("Clear Logs"):
+        clear_logs()
+        st.success("Logs cleared!")
+
+# User Database Management
+elif menu == "👥 User Database":
+    st.subheader("👥 User Management")
+
+    users = fetch_users()
+
+    if users.empty:
+        st.warning("No users found in the database.")
+    else:
+        st.dataframe(users)
+
+        user_id = st.number_input("Enter User ID to Modify:", min_value=1, step=1)
+        new_points = st.number_input("Enter New Points:", min_value=0, step=500)
+
+        if st.button("Update Points"):
+            update_user_points(user_id, new_points)
+            st.success(f"Updated User {user_id}'s points to {new_points}")
+
+        if st.button("Delete User"):
+            delete_user(user_id)
+            st.warning(f"Deleted User {user_id}")
+
