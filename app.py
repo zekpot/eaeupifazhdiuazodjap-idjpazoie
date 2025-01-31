@@ -426,11 +426,11 @@ async def handle_withdraw_confirmation(update: Update, context: ContextTypes.DEF
     await query.message.reply_text(f"Withdrawal successful! Transferred {points} points to {wallet_address}")
 
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+#logging.basicConfig(
+#    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#    level=logging.INFO
+#)
+#logger = logging.getLogger(__name__)
 
 
 ADMIN_IDS = [5279018187]  
